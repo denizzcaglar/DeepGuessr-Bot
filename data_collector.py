@@ -74,7 +74,7 @@ def main():
                     # Scene is already loaded, minimal pause before guessing
                     ctrl.page.wait_for_timeout(200)
                 
-                ctrl.guess_random_location()
+                ctrl.guess_random_location_api()
                 if r < 5 and not ctrl.next_round(): break
                 
     finally:

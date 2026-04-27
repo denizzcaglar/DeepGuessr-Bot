@@ -10,8 +10,9 @@ class PlaywrightUtils:
 
     def start_browser_geoguessr(self):
         self.playwright = sync_playwright().start()
-        self.browser = self.playwright.chromium.launch(headless=False)
+        self.browser = self.playwright.chromium.launch(headless=False, args=['--start-maximized'])
         self.context = self.browser.new_context(
+            no_viewport=True,
             user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
         )
         

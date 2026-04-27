@@ -6,34 +6,7 @@ class GeoGuessrController:
         self.page = page
         self.game_state = {}
         self.page.on("response", self._handle_api)
-        self.LAND_REGIONS = [
-            # Europe
-            (35, 70, -10, 40),
-            # Russia / Central Asia
-            (50, 70, 40, 140),
-            # East Asia
-            (20, 50, 100, 145),
-            # South / Southeast Asia
-            (0, 30, 65, 110),
-            # Sub-Saharan Africa
-            (-35, 15, 10, 50),
-            # North Africa / Middle East
-            (15, 38, -10, 60),
-            # North America
-            (25, 70, -165, -52),
-            # Central America / Caribbean
-            (8, 25, -92, -60),
-            # South America
-            (-55, 12, -82, -34),
-            # Australia
-            (-43, -10, 113, 154),
-            # New Zealand
-            (-47, -34, 166, 178),
-            # Japan
-            (31, 45, 130, 145),
-            # UK / Ireland
-            (51, 59, -8, 2),
-        ]
+
 
     def _handle_api(self, response):
         if "/api/v3/games" in response.url:
@@ -62,7 +35,7 @@ class GeoGuessrController:
         for _ in range(20):
             if self.game_state and "rounds" in self.game_state: break
             self.page.wait_for_timeout(200)
-        self.page.wait_for_timeout(2000) # Reverted to 2.0s (the original stable value)
+        self.page.wait_for_timeout(3000) # Increased to 3.0s to fully clear loading screens
 
     def random_look_around(self):
         val = random.uniform(-2.0, 2.0)
@@ -89,91 +62,88 @@ class GeoGuessrController:
             pass
 
     def latlon_to_pixel(self, lat, lon, box):
-        # Two ground truth points from manual calibration:
-        # Lagos (6.5, 3.4) → pixel (191, 131)
-        # Istanbul (41, 28.97) → pixel (220, 80)
+        import coordinates
+        return coordinates.latlon_to_pixel(self, lat, lon, box)
 
-        # Raw Mercator fractions
-        def merc(lat_deg):
-            r = math.radians(lat_deg)
-            return math.log(math.tan(math.pi / 4 + r / 2))
-
-        # Compute raw fracs for our two known points
-        lagos_lat, lagos_lon = 6.5, 3.4
-        istanbul_lat, istanbul_lon = 41.0, 28.97
-
-        def raw_fracs(lat, lon):
-            x = (lon + 180) / 360
-            lat_max, lat_min = math.radians(85.051), math.radians(-85.051)
-            merc_max = merc(math.degrees(lat_max))
-            merc_min = merc(math.degrees(lat_min))
-            y = 1 - (merc(lat) - merc_min) / (merc_max - merc_min)
-            return x, y
-
-        lx, ly = raw_fracs(lagos_lat, lagos_lon)
-        ix, iy = raw_fracs(istanbul_lat, istanbul_lon)
-
-        # Known pixel positions (as fractions of box)
-        lx_px, ly_px = 195 / box["width"], 141 / box["height"]
-        ix_px, iy_px = 220 / box["width"], 80 / box["height"]
-
-        # Fit linear transform: pixel_frac = a * raw_frac + b
-        # Using two points to solve for a and b on each axis
-        ax = (ix_px - lx_px) / (ix - lx)
-        bx = lx_px - ax * lx
-        ay = (iy_px - ly_px) / (iy - ly)
-        by = ly_px - ay * ly
-
-        x_raw, y_raw = raw_fracs(lat, lon)
-        x_frac = ax * x_raw + bx
-        y_frac = ay * y_raw + by
-
-        return {
-            "x": box["width"] * x_frac,
-            "y": box["height"] * y_frac
-        }
+    def calibrate_map(self):
+        import coordinates
+        coordinates.calibrate_map(self)
 
     def random_lat_lon(self):
-        region = random.choice(self.LAND_REGIONS)
-        lat = random.uniform(region[0], region[1])
-        lon = random.uniform(region[2], region[3])
-        return lat, lon
+        import coordinates
+        return coordinates.random_lat_lon()
 
     def guess_random_location(self):
         try:
             lat, lon = self.random_lat_lon()
+            self.guess_location(lat, lon)
+        except Exception as e:
+            print(f"DEBUG: Visual Guess Error: {e}")
+
+    def guess_random_location_api(self):
+        try:
+            lat, lon = self.random_lat_lon()
+            self.guess_api(lat, lon)
+        except Exception as e:
+            print(f"DEBUG: API Guess Error: {e}")
+
+    def guess_api(self, lat, lon):
+        game_token = self.game_state.get('token')
+        if not game_token: return
+        print(f"API Guessing at lat={lat:.2f}, lon={lon:.2f}")
+        try:
+            self.page.evaluate(f"""
+                fetch('https://www.geoguessr.com/api/v3/games/{game_token}', {{
+                    method: 'POST',
+                    headers: {{'Content-Type': 'application/json'}},
+                    body: JSON.stringify({{ lat: {lat}, lng: {lon}, timedOut: false }})
+                }})
+            """)
+            self.page.wait_for_timeout(2000)
+        except Exception as e:
+            print(f"DEBUG: API POST Error: {e}")
+
+    def guess_location(self, lat, lon):
+        try:
             print(f"Guessing at lat={lat:.2f}, lon={lon:.2f}")
             
-            game_id = self.page.url.split("/game/")[-1]
+            self.close_map_data_dialog()
             
-            status = self.page.evaluate(f"""
-                async () => {{
-                    const response = await fetch('/api/v3/games/{game_id}', {{
-                        method: 'POST',
-                        headers: {{ 'Content-Type': 'application/json' }},
-                        body: JSON.stringify({{
-                            token: '{game_id}',
-                            lat: {lat},
-                            lng: {lon},
-                            timedOut: false,
-                            timedOutWithGuess: false
-                        }})
-                    }});
-                    return response.status;
-                }}
-            """)
-            print(f"API guess status: {status}")
-            self.page.wait_for_timeout(200) # Reduced from 1000ms
+            guess_map = self.page.locator('[data-qa="guess-map-canvas"]')
+            # Hover first
+            guess_map.hover()
+            self.page.wait_for_timeout(800)  # Wait for map to fully expand
+            
+            # Get box AFTER expansion
+            box = guess_map.bounding_box()
+            print(f"Box after hover: w={box['width']} h={box['height']}")
+        
+            if box:
+                pos = self.latlon_to_pixel(lat, lon, box)
+                pos["x"] = max(5, min(pos["x"], box["width"] - 5))
+                pos["y"] = max(5, min(pos["y"], box["height"] - 5))
+                print(f"Clicking at: {pos}")
+                self.page.mouse.click(box["x"] + pos["x"], box["y"] + pos["y"])
+        
+            self.page.wait_for_timeout(500)
+            btn = self.page.locator('[data-qa="perform-guess"]:not([disabled])')
+            btn.wait_for(state="visible", timeout=5000)
+            btn.click()
+        
+            print("Showing round results...")
+            self.page.wait_for_timeout(3000)
 
         except Exception as e:
             print(f"DEBUG: Visual Guess Error: {e}")
 
     def next_round(self):
+        btn = self.page.locator('[data-qa="close-round-result"]')
         try:
-            self.page.reload()
-            self.page.wait_for_timeout(500) # Reduced from 2000ms
-            self.page.wait_for_url("**/game/**", timeout=10000)
+            btn.wait_for(state="visible", timeout=5000)
+            self.page.wait_for_timeout(500)
+            btn.click()
             return True
         except:
+            if "/game/" in self.page.url: return True
             return False
 
