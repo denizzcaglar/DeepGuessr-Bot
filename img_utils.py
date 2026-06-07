@@ -2,6 +2,14 @@ import cv2
 import numpy as np
 import os
 import pandas as pd
+import json
+
+def load_config(config_path="config.json"):
+    if not os.path.exists(config_path):
+        raise FileNotFoundError(f"Configuration file missing: {config_path}")
+    with open(config_path, 'r') as f:
+        return json.load(f)
+
 
 def is_mostly_black(img, threshold=4, black_ratio=0.8):
     """Checks if an image is mostly dark/zeroed out."""
@@ -15,23 +23,52 @@ def is_mostly_black(img, threshold=4, black_ratio=0.8):
     total_pixels = gray.size
     return (black_pixels / total_pixels) >= black_ratio
 
-def process_and_save_image(image_path, output_path, size=(640, 640)):
+def process_and_save_image(image_path, output_path):
     """Resizes and filters image. Returns True if saved, False if rejected."""
     img = cv2.imread(image_path)
     if img is None:
         return False
         
-    # 1. Check if mostly black BEFORE resizing (faster)
     if is_mostly_black(img):
         if os.path.exists(image_path):
             os.remove(image_path)
         return False
         
-    # 2. Resize using INTER_AREA as requested
-    resized = cv2.resize(img, size, interpolation=cv2.INTER_AREA)
+    config = load_config()
+    try:
+        tw = config["size"]["width"]
+        th = config["size"]["height"]
+    except KeyError as e:
+        raise KeyError(f"Invalid config.json format. Missing required key: {e}")
     
-    # 3. Save to output path (can be same as image_path)
-    cv2.imwrite(output_path, resized)
+    ih, iw = img.shape[:2]
+    tr = tw / th
+    ir = iw / ih
+    
+    cropped = False
+    if ir > tr:
+        # Image is wider, crop width
+        new_w = int(ih * tr)
+        start_x = (iw - new_w) // 2
+        img = img[:, start_x:start_x+new_w]
+        cropped = True
+    elif ir < tr:
+        # Image is taller, crop height
+        new_h = int(iw / tr)
+        start_y = (ih - new_h) // 2
+        img = img[start_y:start_y+new_h, :]
+        cropped = True
+        
+    resized = False
+    # Skip resize if the image is already the target size
+    if img.shape[1] != tw or img.shape[0] != th:
+        img = cv2.resize(img, (tw, th), interpolation=cv2.INTER_AREA)
+        resized = True
+        
+    # Only rewrite to disk if we modified the image or are saving to a new path
+    if cropped or resized or image_path != output_path:
+        cv2.imwrite(output_path, img)
+        
     return True
 
 def cleanup_existing_data(data_dir="data"):

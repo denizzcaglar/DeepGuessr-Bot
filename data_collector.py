@@ -8,7 +8,7 @@ from GeoGuessrController import GeoGuessrController
 import img_utils
 
 load_dotenv()
-DATA_DIR, IMAGES_DIR, METADATA_FILE = "data", "data/images", "data/image_metadata.csv"
+DATA_DIR, IMAGES_DIR, METADATA_FILE = "dataset", "dataset/images", "dataset/image_metadata.csv"
 ROTATE = False  # Set to True if you want random rotations
 
 def get_existing_panos():
@@ -37,7 +37,8 @@ def main():
                     print("\nStop requested. Finishing current round...")
                     stop_requested = True
 
-            if stop_requested: break
+            if stop_requested:
+                break
             
             print("\nStarting new game...")
             ctrl.start_new_world_game()
@@ -48,7 +49,9 @@ def main():
                         print("\nStop requested. Finishing current round...")
                         stop_requested = True
 
-                if stop_requested: break
+                if stop_requested:
+                    break
+
                 print(f"Round {r}/5...")
                 ctrl.wait_for_game_start()
                 
@@ -60,22 +63,23 @@ def main():
                     path = os.path.join(IMAGES_DIR, img_name)
                     ctrl.take_screenshot(path)
                     
-                    # PROCESS & FILTER
                     if img_utils.process_and_save_image(path, path):
                         header = not os.path.isfile(METADATA_FILE)
                         with open(METADATA_FILE, mode='a', newline='', encoding='utf-8') as f:
                             w = csv.writer(f)
-                            if header: w.writerow(["image_name", "lat", "lng", "country_code", "pano_id"])
+                            if header:
+                                w.writerow(["image_name", "lat", "lng", "country_code", "pano_id"])
+
                             w.writerow([img_name, meta['lat'], meta['lng'], meta['country_code'], meta['panoId']])
                         existing_panos.append(meta['panoId'])
                     else:
                         print(f"Skipping round: Image was mostly black/invalid.")
                     
-                    # Scene is already loaded, minimal pause before guessing
                     ctrl.page.wait_for_timeout(200)
                 
                 ctrl.guess_random_location_api()
-                if r < 5 and not ctrl.next_round(): break
+                if r < 5 and not ctrl.next_round():
+                    break
                 
     finally:
         pw.close_browser()

@@ -1,8 +1,0 @@
-torch
-matplotlib
-requests
-python-dotenv
-opencv-python
-pillow
-numpy
-playwright

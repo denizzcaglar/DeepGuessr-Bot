@@ -27,7 +27,7 @@ class GeoGuessrController:
         self.game_state = {}
         self.page.goto("https://www.geoguessr.com/maps/world")
         self.page.get_by_role("button", name="No Move").click()
-        self.page.wait_for_timeout(200) # Fast sync
+        self.page.wait_for_timeout(200) 
         self.page.get_by_role("button", name="Play", exact=True).click()
 
     def wait_for_game_start(self):
@@ -35,7 +35,7 @@ class GeoGuessrController:
         for _ in range(20):
             if self.game_state and "rounds" in self.game_state: break
             self.page.wait_for_timeout(200)
-        self.page.wait_for_timeout(3000) # Increased to 3.0s to fully clear loading screens
+        self.page.wait_for_timeout(3000)
 
     def random_look_around(self):
         val = random.uniform(-2.0, 2.0)
@@ -50,7 +50,18 @@ class GeoGuessrController:
         except: pass
 
     def take_screenshot(self, save_path):
+        css_injection = """
+            .game_topHud__P_g7z, 
+            .game_controls__xgq6p, 
+            .game_status___YFni, 
+            .guess-map_guessMap__IP8n_, 
+            .game-reactions_root__TSjX_ { 
+                display: none !important; 
+            }
+        """
+        self.page.add_style_tag(content=css_injection)
         self.page.screenshot(path=save_path)
+
 
     def close_map_data_dialog(self):
         try:
@@ -96,10 +107,15 @@ class GeoGuessrController:
                 fetch('https://www.geoguessr.com/api/v3/games/{game_token}', {{
                     method: 'POST',
                     headers: {{'Content-Type': 'application/json'}},
-                    body: JSON.stringify({{ lat: {lat}, lng: {lon}, timedOut: false }})
+                    body: JSON.stringify({{ 
+                        lat: {lat}, 
+                        lng: {lon}, 
+                        timedOut: false,
+                        token: '{game_token}'
+                    }})
                 }})
             """)
-            self.page.wait_for_timeout(2000)
+            self.page.wait_for_timeout(1000)
         except Exception as e:
             print(f"DEBUG: API POST Error: {e}")
 
@@ -137,13 +153,10 @@ class GeoGuessrController:
             print(f"DEBUG: Visual Guess Error: {e}")
 
     def next_round(self):
-        btn = self.page.locator('[data-qa="close-round-result"]')
         try:
-            btn.wait_for(state="visible", timeout=5000)
-            self.page.wait_for_timeout(500)
-            btn.click()
+            self.page.reload()
+            self.page.wait_for_timeout(1000)
+            self.page.wait_for_url("**/game/**", timeout=10000)
             return True
         except:
-            if "/game/" in self.page.url: return True
             return False
-

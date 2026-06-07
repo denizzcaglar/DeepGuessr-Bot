@@ -44,6 +44,10 @@ def main():
                     temp_img_path = "temp_inference.png"
                     ctrl.take_screenshot(temp_img_path)
                     
+                    import img_utils
+                    img_utils.process_and_save_image(temp_img_path, temp_img_path)
+
+                    
                     lat, lon = predict_coordinates(temp_img_path)
                     
                     wait_time = random.uniform(2.5, 7.5)
@@ -55,11 +59,11 @@ def main():
                     if os.path.exists(temp_img_path):
                         os.remove(temp_img_path)
                         
-                    if r == 5:
-                        print("Game finished. Waiting 10 seconds to display final results...")
-                        ctrl.page.wait_for_timeout(10000)
-                        
-                if r < 5 and not ctrl.next_round(): break
+                if not ctrl.next_round(): break
+
+                if r == 5:
+                    print("Game finished. Waiting 10 seconds to display final results...")
+                    ctrl.page.wait_for_timeout(10000)
                 
     finally:
         pw.close_browser()

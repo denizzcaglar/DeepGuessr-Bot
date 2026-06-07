@@ -13,24 +13,21 @@ def run_command(command):
 def main():
     print("Initializing GeoGuessr Bot Environment...")
 
-    # Install dependencies from requirements.txt
-    if os.path.exists("requirements.txt"):
-        print("\n--- Installing dependencies from requirements.txt ---")
-        run_command([sys.executable, "-m", "pip", "install", "-r", "requirements.txt"])
-    else:
-        print("\nWarning: requirements.txt not found. Skipping pip install.")
+    # Sync dependencies via uv
+    print("\n--- Installing dependencies via uv ---")
+    run_command(["uv", "sync"])
 
     # Install Playwright browsers
     print("\n--- Installing Playwright browsers ---")
-    run_command([sys.executable, "-m", "playwright", "install", "chromium"])
+    run_command(["uv", "run", "playwright", "install", "chromium"])
 
     # Check for .env file
     if not os.path.exists(".env"):
-        print("\nWarning: .env file not found. Please create one based on .env.example (if available) or add your GEOGUESSR_COOKIE.")
+        print("\nWarning: .env file not found. Please create one and add your GEOGUESSR_COOKIE.")
     else:
         print("\n.env file detected.")
 
-    print("\nSetup complete! You can now run the bot using 'python main.py'.")
+    print("\nSetup complete! You can now run the bot using 'uv run python main.py'.")
 
 if __name__ == "__main__":
     main()

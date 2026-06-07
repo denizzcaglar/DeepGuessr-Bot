@@ -9,10 +9,17 @@ class PlaywrightUtils:
         self.context = None
 
     def start_browser_geoguessr(self):
+        import json
+        config_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "config.json")
+        with open(config_path, 'r') as f:
+            config = json.load(f)
+        vp_w = config["size"]["width"]
+        vp_h = config["size"]["height"]
+        
         self.playwright = sync_playwright().start()
-        self.browser = self.playwright.chromium.launch(headless=False, args=['--start-maximized'])
+        self.browser = self.playwright.chromium.launch(headless=False)
         self.context = self.browser.new_context(
-            no_viewport=True,
+            viewport={"width": vp_w, "height": vp_h},
             user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
         )
         
